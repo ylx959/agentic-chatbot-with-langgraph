@@ -1,0 +1,23 @@
+[project]
+name = "agentic-chatbot-using-langgraph"
+version = "0.1.0"
+description = "Agentic chatbot built with LangGraph + Streamlit"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "faiss-cpu==1.14.3",
+    "langchain==1.3.1",
+    "langchain-community==0.4.2",
+    "langchain-google-genai==4.2.4",
+    "langchain-tavily==0.2.18",
+    "langchain-text-splitters==1.1.2",
+    "langgraph==1.2.0",
+    "langgraph-checkpoint-sqlite==3.1.0",
+    "pypdf==6.13.2",
+    "python-dotenv==1.2.2",
+    "requests>=2.34.2",
+    "streamlit==1.58.0",
+]
+
+[tool.uv]
+package = false
