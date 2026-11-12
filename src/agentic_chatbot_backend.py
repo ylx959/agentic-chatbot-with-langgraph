@@ -3,11 +3,12 @@ from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
+from config import ENV_PATH
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import add_messages
 
 
-load_dotenv()
+load_dotenv(ENV_PATH)
 
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite")
 

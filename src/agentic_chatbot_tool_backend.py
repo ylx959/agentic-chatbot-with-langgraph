@@ -3,6 +3,7 @@ from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
+from config import ENV_PATH, CHAT_DB_PATH
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
 import sqlite3
@@ -16,7 +17,7 @@ from typing import Any
 
 
 
-load_dotenv()
+load_dotenv(ENV_PATH)
 
 ## If you have openAI API key and want to use OpenAI models, uncomment the line below and comment the Gemini LLM initialization
 
@@ -30,7 +31,7 @@ llm = ChatGoogleGenerativeAI(
 
 
 
-load_dotenv()
+load_dotenv(ENV_PATH)
 
 
 # LLM 
@@ -242,7 +243,7 @@ tool_node = ToolNode(tools)
 
 
 # Checkpointer
-conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
+conn = sqlite3.connect(database=str(CHAT_DB_PATH), check_same_thread=False)
 checkpoint = SqliteSaver(conn)
 
 

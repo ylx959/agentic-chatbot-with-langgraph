@@ -1,8 +1,13 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
+from config import ENV_PATH, CHAT_DB_PATH, FAISS_DB_PATH
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
 import sqlite3
@@ -17,10 +22,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 import os 
 from typing import Any
+from langgraph.types import interrupt, Command
 
 
-
-load_dotenv()
+load_dotenv(ENV_PATH)
 
 
 # LLM 
@@ -36,7 +41,7 @@ embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
 
 def ingest_rag_document(file_path):
-    DB_PATH = "faiss_db"
+    DB_PATH = str(FAISS_DB_PATH)
     loader = PyPDFLoader(file_path)
     docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -47,7 +52,7 @@ def ingest_rag_document(file_path):
 
 
 def get_retriever():
-    DB_PATH = "faiss_db"
+    DB_PATH = str(FAISS_DB_PATH)
     vector_store = FAISS.load_local(
             folder_path=DB_PATH,
             embeddings=embeddings,
@@ -146,6 +151,37 @@ def get_stock_price(symbol: str) -> dict:
     url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey=9MZO2JUBR7IFNTOI"
     r = requests.get(url)
     return r.json()
+
+
+
+@tool
+def purchase_stock(symbol: str, quantity: int) -> dict:
+    """
+    Simulate purchasing a given quantity of a stock symbol.
+
+    HUMAN-IN-THE-LOOP:
+    Before confirming the purchase, this tool will interrupt
+    and wait for a human decision ("yes" / anything else).
+    """
+    # This pauses the graph and returns control to the caller
+    decision = interrupt(f"Approve buying {quantity} shares of {symbol}? (yes/no)")
+
+    if isinstance(decision, str) and decision.lower() == "yes":
+        return {
+            "status": "success",
+            "message": f"Purchase order placed for {quantity} shares of {symbol}.",
+            "symbol": symbol,
+            "quantity": quantity,
+        }
+    
+    else:
+        return {
+            "status": "cancelled",
+            "message": f"Purchase of {quantity} shares of {symbol} was declined by human.",
+            "symbol": symbol,
+            "quantity": quantity,
+        }
+
 
 
 
@@ -272,7 +308,7 @@ def get_current_weather(location: str) -> str:
 
 
 # Make tool list
-tools = [search_tool,calculator, get_stock_price,get_current_weather, rag_tool]
+tools = [search_tool,calculator, get_stock_price,get_current_weather, rag_tool, purchase_stock]
 
 # Make the LLM tool-aware
 llm_with_tools = llm.bind_tools(tools)
@@ -303,6 +339,7 @@ def chat_node(state: ChatState):
             "- Use `calculator` for mathematical calculations. Do not calculate complex "
             "expressions manually when the calculator is available.\n"
             "- Use `get_stock_price` when the user asks for the current price of a stock.\n"
+            "- Use `purchase_stock` when the user wants to purchase a stock.\n"
             "- Use `get_current_weather` when the user asks about current weather for a location.\n\n"
 
             "Answer general questions directly when no tool is required. "
@@ -323,13 +360,14 @@ def chat_node(state: ChatState):
 
 
 
+
 # Nodes 2 - tool node
 tool_node = ToolNode(tools)
 
 
 
 # Checkpointer
-conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
+conn = sqlite3.connect(database=str(CHAT_DB_PATH), check_same_thread=False)
 checkpoint = SqliteSaver(conn)
 
 
@@ -357,3 +395,51 @@ def get_all_threads():
         all_threads.add(ckpt.config['configurable']['thread_id'])
 
     return list(all_threads)
+
+
+
+
+# -------------------
+# Simple usage example (CLI with HITL)
+# -------------------
+if __name__ == "__main__":
+    print("🤖 Agentic Chatbot CLI\n")
+    print("Type 'exit' to quit.\n")
+    
+    # Use a fixed thread_id so the conversation is persisted in memory
+    thread_id = "demo-thread"
+
+    while True:
+        user_input = input("You: ")
+        if user_input.lower().strip() in {"exit", "quit"}:
+            print("Goodbye!")
+            break
+
+        # Build initial state for this turn
+        state = {"messages": [HumanMessage(content=user_input)]}
+
+        # Run the graph (may hit an interrupt)
+        result = chatbot.invoke(
+            state,
+            config={"configurable": {"thread_id": thread_id}},
+        )
+
+        # Check for HITL interrupt from purchase_stock
+        interrupts = result.get("__interrupt__", [])
+
+        if interrupts:
+            # Our interrupt payload is the string we passed to interrupt(...)
+            prompt_to_human = interrupts[0].value
+            print(f"HITL: {prompt_to_human}")
+            decision = input("Your decision: ").strip().lower()
+
+            # Resume graph with the human decision ("yes" / "no" / whatever)
+            result = chatbot.invoke(
+                Command(resume=decision),
+                config={"configurable": {"thread_id": thread_id}},
+            )
+
+        # Get the latest message from the assistant
+        messages = result["messages"]
+        last_msg = messages[-1]
+        print(f"Bot: {last_msg.content}\n")

@@ -3,6 +3,7 @@ from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
+from config import ENV_PATH, CHAT_DB_PATH, FAISS_DB_PATH
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
 import sqlite3
@@ -20,7 +21,7 @@ from typing import Any
 from langgraph.types import interrupt, Command
 
 
-load_dotenv()
+load_dotenv(ENV_PATH)
 
 
 # LLM 
@@ -36,7 +37,7 @@ embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
 
 def ingest_rag_document(file_path):
-    DB_PATH = "faiss_db"
+    DB_PATH = str(FAISS_DB_PATH)
     loader = PyPDFLoader(file_path)
     docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -47,7 +48,7 @@ def ingest_rag_document(file_path):
 
 
 def get_retriever():
-    DB_PATH = "faiss_db"
+    DB_PATH = str(FAISS_DB_PATH)
     vector_store = FAISS.load_local(
             folder_path=DB_PATH,
             embeddings=embeddings,
@@ -362,7 +363,7 @@ tool_node = ToolNode(tools)
 
 
 # Checkpointer
-conn = sqlite3.connect(database="chatbot.db", check_same_thread=False)
+conn = sqlite3.connect(database=str(CHAT_DB_PATH), check_same_thread=False)
 checkpoint = SqliteSaver(conn)
 
 
