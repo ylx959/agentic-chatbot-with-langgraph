@@ -142,7 +142,7 @@ for thread_id in st.session_state["chat_threads"][::-1]:
             # Convert the LangChain message into a dictionary
             temp_messages.append({
                 "role": role,
-                "content": message.content
+                "content": message.text
             })
 
         # Replace the current UI history with the selected conversation
@@ -323,7 +323,7 @@ if user_input:
 
                 # Stream ONLY assistant tokens
                 if isinstance(message_chunk, AIMessage):
-                    yield message_chunk.content
+                    yield message_chunk.text
 
 
         ai_message = st.write_stream(

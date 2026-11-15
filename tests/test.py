@@ -16,7 +16,7 @@ for message_chunk, metadata in chatbot.stream(
     config= CONFIG,
     stream_mode= 'messages'):
 
-    if message_chunk.content:
-        print(message_chunk.content, end=" ", flush=True)
+    if message_chunk.text:
+        print(message_chunk.text, end=" ", flush=True)
     
 

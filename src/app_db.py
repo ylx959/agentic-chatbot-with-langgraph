@@ -132,7 +132,7 @@ for thread_id in st.session_state["chat_threads"][::-1]:
             # Convert the LangChain message into a dictionary
             temp_messages.append({
                 "role": role,
-                "content": message.content
+                "content": message.text
             })
 
 
@@ -184,7 +184,7 @@ if user_input:
         "metadata": {
             "thread_id": st.session_state["thread_id"]
         },
-        "run_name": "chat_trace",
+        "run_name": "chat_trace"
     }
 
 
@@ -196,7 +196,7 @@ if user_input:
         ai_message = st.write_stream(
 
             # Return only the content of AI message chunks
-            message_chunk.content
+            message_chunk.text
 
             # Stream messages from the LangGraph chatbot
             for message_chunk, metadata in chatbot.stream(

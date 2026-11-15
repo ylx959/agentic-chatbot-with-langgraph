@@ -248,8 +248,8 @@ def resume_hitl_execution(decision):
                         AIMessage
                     ):
 
-                        if message_chunk.content:
-                            yield message_chunk.content
+                        if message_chunk.text:
+                            yield message_chunk.text
 
             # Display the streamed final answer
             resumed_ai_message = st.write_stream(
@@ -406,7 +406,7 @@ for thread_id in st.session_state["chat_threads"][::-1]:
             # Convert the LangChain message into a dictionary
             temp_messages.append({
                 "role": role,
-                "content": message.content
+                "content": message.text
             })
 
         # Replace the current UI history with the selected conversation
@@ -650,7 +650,7 @@ if user_input:
                     message_chunk,
                     AIMessage
                 ):
-                    yield message_chunk.content
+                    yield message_chunk.text
 
             # ========================= HITL ADDED =========================
 
