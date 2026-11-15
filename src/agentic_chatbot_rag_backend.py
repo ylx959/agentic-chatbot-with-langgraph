@@ -16,6 +16,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_community.document_compressors import FlashrankRerank
 import os 
 from typing import Any
 
@@ -33,6 +34,15 @@ llm = ChatGoogleGenerativeAI(
 
 # Embeddings model
 embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+
+
+# Two-stage retrieval: FAISS fetches RETRIEVE_K candidates, FlashRank keeps the best RERANK_TOP_N
+RETRIEVE_K = 20
+RERANK_TOP_N = 4
+
+# Reranker (runs locally; the model is downloaded once on first use)
+# ms-marco-MultiBERT-L-12 is multilingual, so Chinese queries work too
+reranker = FlashrankRerank(model="ms-marco-MultiBERT-L-12", top_n=RERANK_TOP_N)
 
 
 
@@ -57,7 +67,7 @@ def get_retriever():
     
     retriever = vector_store.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 4}
+        search_kwargs={"k": RETRIEVE_K}
     )
 
     return retriever
@@ -79,7 +89,8 @@ def rag_tool(query: str) -> str:
         query: The question or search query used to retrieve PDF content.
     """
     retriever = get_retriever()
-    documents = retriever.invoke(query)
+    candidates = retriever.invoke(query)
+    documents = reranker.compress_documents(candidates, query)
 
     if not documents:
         return "No relevant information was found in the PDF."
@@ -89,11 +100,13 @@ def rag_tool(query: str) -> str:
     for index, document in enumerate(documents, start=1):
         source = document.metadata.get("source", "Unknown source")
         page = document.metadata.get("page", "Unknown page")
+        score = document.metadata.get("relevance_score")
 
         formatted_documents.append(
             f"Document {index}\n"
             f"Source: {source}\n"
             f"Page: {page}\n"
+            f"Relevance score: {score:.3f}\n"
             f"Content: {document.page_content}"
         )
 
