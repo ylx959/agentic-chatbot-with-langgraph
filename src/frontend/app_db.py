@@ -1,4 +1,8 @@
-from agentic_chatbot_backend import chatbot 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # make src/ importable
+
+from backend.agentic_chatbot_db_backend import chatbot, get_all_threads
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 import streamlit as st
 import uuid 
@@ -66,7 +70,7 @@ if "thread_id" not in st.session_state:
 
 # Create a list for storing all conversation thread IDs
 if "chat_threads" not in st.session_state:
-    st.session_state["chat_threads"] = []
+    st.session_state["chat_threads"] = get_all_threads()
 
 
 
@@ -178,11 +182,15 @@ if user_input:
 
     # Pass the current thread ID to LangGraph
     # LangGraph uses this ID to save and retrieve conversation memory
+
     CONFIG = {
-        "configurable": {
+        "configurable": {"thread_id": st.session_state["thread_id"]},
+        "metadata": {
             "thread_id": st.session_state["thread_id"]
-        }
+        },
+        "run_name": "chat_trace"
     }
+
 
 
     # Create the assistant chat-message container

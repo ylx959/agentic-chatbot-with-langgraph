@@ -7,7 +7,7 @@ from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
-from config import ENV_PATH, CHAT_DB_PATH, FAISS_DB_PATH
+from backend.config import ENV_PATH, CHAT_DB_PATH, FAISS_DB_PATH
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
 import sqlite3

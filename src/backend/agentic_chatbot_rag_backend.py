@@ -1,9 +1,9 @@
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
-from config import ENV_PATH, CHAT_DB_PATH
+from backend.config import ENV_PATH, CHAT_DB_PATH, FAISS_DB_PATH
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
 import sqlite3
@@ -12,6 +12,11 @@ from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 import math
 import requests
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.document_compressors import FlashrankRerank
 import os 
 from typing import Any
 
@@ -19,9 +24,6 @@ from typing import Any
 
 load_dotenv(ENV_PATH)
 
-## If you have openAI API key and want to use OpenAI models, uncomment the line below and comment the Gemini LLM initialization
-
-# llm = ChatOpenAI()
 
 # LLM 
 llm = ChatGoogleGenerativeAI(
@@ -30,15 +32,86 @@ llm = ChatGoogleGenerativeAI(
 )
 
 
+# Embeddings model
+embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
-load_dotenv(ENV_PATH)
+
+# Two-stage retrieval: FAISS fetches RETRIEVE_K candidates, FlashRank keeps the best RERANK_TOP_N
+RETRIEVE_K = 20
+RERANK_TOP_N = 4
+
+# Reranker (runs locally; the model is downloaded once on first use)
+# ms-marco-MultiBERT-L-12 is multilingual, so Chinese queries work too
+reranker = FlashrankRerank(model="ms-marco-MultiBERT-L-12", top_n=RERANK_TOP_N)
 
 
-# LLM 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-3.1-flash-lite",
-    temperature=0.7
-)
+
+def ingest_rag_document(file_path):
+    DB_PATH = str(FAISS_DB_PATH)
+    loader = PyPDFLoader(file_path)
+    docs = loader.load()
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = splitter.split_documents(docs)
+    vector_store = FAISS.from_documents(chunks, embeddings)
+    vector_store.save_local(DB_PATH)
+    
+
+
+def get_retriever():
+    DB_PATH = str(FAISS_DB_PATH)
+    vector_store = FAISS.load_local(
+            folder_path=DB_PATH,
+            embeddings=embeddings,
+            allow_dangerous_deserialization=True
+        )
+    
+    retriever = vector_store.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": RETRIEVE_K}
+    )
+
+    return retriever
+
+
+
+
+# rag tool
+
+@tool
+def rag_tool(query: str) -> str:
+    """
+    Retrieve relevant information from the PDF document.
+
+    Use this tool when the user asks factual or conceptual questions
+    that may be answered using the stored PDF documents.
+
+    Args:
+        query: The question or search query used to retrieve PDF content.
+    """
+    retriever = get_retriever()
+    candidates = retriever.invoke(query)
+    documents = reranker.compress_documents(candidates, query)
+
+    if not documents:
+        return "No relevant information was found in the PDF."
+
+    formatted_documents = []
+
+    for index, document in enumerate(documents, start=1):
+        source = document.metadata.get("source", "Unknown source")
+        page = document.metadata.get("page", "Unknown page")
+        score = document.metadata.get("relevance_score")
+
+        formatted_documents.append(
+            f"Document {index}\n"
+            f"Source: {source}\n"
+            f"Page: {page}\n"
+            f"Relevance score: {score:.3f}\n"
+            f"Content: {document.page_content}"
+        )
+
+    return "\n\n".join(formatted_documents)
+
 
 
 
@@ -213,7 +286,7 @@ def get_current_weather(location: str) -> str:
 
 
 # Make tool list
-tools = [search_tool,calculator, get_stock_price,get_current_weather]
+tools = [search_tool,calculator, get_stock_price,get_current_weather, rag_tool]
 
 # Make the LLM tool-aware
 llm_with_tools = llm.bind_tools(tools)
@@ -230,12 +303,39 @@ class ChatState(TypedDict):
 
 # Nodes 1
 def chat_node(state: ChatState):
-    #take user query from state
-    messages = state['messages']
-    # send to llm
+    """LLM node that can answer directly or call an appropriate tool."""
+
+    system_message = SystemMessage(
+        content=(
+            "You are a helpful Agentic Chatbot with access to several tools.\n\n"
+
+            "Tool usage instructions:\n"
+            "- Use `rag_tool` for questions about the uploaded PDF or document. "
+            "Always retrieve relevant document content before answering PDF-related questions.\n"
+            "- Use `search_tool` for current events, recent information, or information "
+            "that requires an internet search.\n"
+            "- Use `calculator` for mathematical calculations. Do not calculate complex "
+            "expressions manually when the calculator is available.\n"
+            "- Use `get_stock_price` when the user asks for the current price of a stock.\n"
+            "- Use `get_current_weather` when the user asks about current weather for a location.\n\n"
+
+            "Answer general questions directly when no tool is required. "
+            "Do not invent information from the uploaded document. "
+            "If the user asks about a PDF but no document is available, ask them to upload a PDF. "
+            "After receiving a tool result, provide a clear and helpful final answer."
+        )
+    )
+
+    messages = [
+        system_message,
+        *state["messages"]
+    ]
+
     response = llm_with_tools.invoke(messages)
-    # response store state
-    return {'messages': [response]}
+
+    return {"messages": [response]}
+
+
 
 # Nodes 2 - tool node
 tool_node = ToolNode(tools)

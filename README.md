@@ -36,19 +36,21 @@ The `notebooks/` folder walks through the same concepts interactively, and `diag
 
 ```
 agentic-chatbot-using-langgraph/
-├── src/                                  # Application code
-│   ├── config.py                         # Shared paths (.env, data/chatbot.db, faiss_db/)
-│   ├── app_simple.py                     # Stage 1 – simple streaming chatbot
-│   ├── app_thread.py                     # Stage 2 – multi-thread conversations
-│   ├── app_db.py                         # Stage 3 – SQLite persistence
-│   ├── app_tool.py                       # Stage 4 – tool calling
-│   ├── app_rag.py                        # Stage 5 – RAG with PDF upload
-│   ├── app_hitl.py                       # Stage 6 – human-in-the-loop approval
-│   ├── agentic_chatbot_backend.py        # Backend for stages 1–2 (MemorySaver)
-│   ├── agentic_chatbot_db_backend.py     # Backend for stage 3 (SqliteSaver)
-│   ├── agentic_chatbot_tool_backend.py   # Backend for stage 4 (tools)
-│   ├── agentic_chatbot_rag_backend.py    # Backend for stage 5 (tools + RAG)
-│   └── agentic_chatbot_hitl_backend.py   # Backend for stage 6 (tools + RAG + HITL)
+├── src/
+│   ├── frontend/                         # Streamlit UIs
+│   │   ├── app_simple.py                 # Stage 1 – simple streaming chatbot
+│   │   ├── app_thread.py                 # Stage 2 – multi-thread conversations
+│   │   ├── app_db.py                     # Stage 3 – SQLite persistence
+│   │   ├── app_tool.py                   # Stage 4 – tool calling
+│   │   ├── app_rag.py                    # Stage 5 – RAG with PDF upload
+│   │   └── app_hitl.py                   # Stage 6 – human-in-the-loop approval
+│   └── backend/                          # LangGraph graphs, tools, persistence
+│       ├── config.py                     # Shared paths (.env, data/chatbot.db, faiss_db/)
+│       ├── agentic_chatbot_backend.py    # Backend for stages 1–2 (MemorySaver)
+│       ├── agentic_chatbot_db_backend.py # Backend for stage 3 (SqliteSaver)
+│       ├── agentic_chatbot_tool_backend.py # Backend for stage 4 (tools)
+│       ├── agentic_chatbot_rag_backend.py  # Backend for stage 5 (tools + RAG)
+│       └── agentic_chatbot_hitl_backend.py # Backend for stage 6 (tools + RAG + HITL)
 │
 ├── notebooks/                            # Step-by-step concept notebooks
 │   ├── Chatbot_workflow.ipynb            # Building the basic chat graph
@@ -126,12 +128,12 @@ LANGSMITH_PROJECT=agentic-chatbot-project
 Run from the project root:
 
 ```bash
-uv run streamlit run src/app_simple.py   # stage 1
-uv run streamlit run src/app_thread.py   # stage 2
-uv run streamlit run src/app_db.py       # stage 3
-uv run streamlit run src/app_tool.py     # stage 4
-uv run streamlit run src/app_rag.py      # stage 5
-uv run streamlit run src/app_hitl.py     # stage 6
+uv run streamlit run src/frontend/app_simple.py   # stage 1
+uv run streamlit run src/frontend/app_thread.py   # stage 2
+uv run streamlit run src/frontend/app_db.py       # stage 3
+uv run streamlit run src/frontend/app_tool.py     # stage 4
+uv run streamlit run src/frontend/app_rag.py      # stage 5
+uv run streamlit run src/frontend/app_hitl.py     # stage 6
 ```
 
 ### Notebooks, examples and tests

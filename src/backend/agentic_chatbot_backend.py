@@ -3,7 +3,7 @@ from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
-from config import ENV_PATH
+from backend.config import ENV_PATH
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import add_messages
 

@@ -1,5 +1,9 @@
-from agentic_chatbot_tool_backend import chatbot, get_all_threads
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # make src/ importable
+
+from backend.agentic_chatbot_backend import chatbot 
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 import streamlit as st
 import uuid 
 
@@ -66,7 +70,7 @@ if "thread_id" not in st.session_state:
 
 # Create a list for storing all conversation thread IDs
 if "chat_threads" not in st.session_state:
-    st.session_state["chat_threads"] = get_all_threads()
+    st.session_state["chat_threads"] = []
 
 
 
@@ -178,53 +182,42 @@ if user_input:
 
     # Pass the current thread ID to LangGraph
     # LangGraph uses this ID to save and retrieve conversation memory
-
     CONFIG = {
-        "configurable": {"thread_id": st.session_state["thread_id"]},
-        "metadata": {
+        "configurable": {
             "thread_id": st.session_state["thread_id"]
-        },
-        "run_name": "chat_trace",
+        }
     }
 
 
-
-    # Assistant streaming block
+    # Create the assistant chat-message container
     with st.chat_message("assistant"):
-        # Use a mutable holder so the generator can set/modify it
-        status_holder = {"box": None}
 
-        def ai_only_stream():
+        # Stream the assistant response token by token
+        ai_message = st.write_stream(
+
+            # Return only the content of AI message chunks
+            message_chunk.text
+
+            # Stream messages from the LangGraph chatbot
             for message_chunk, metadata in chatbot.stream(
-                {"messages": [HumanMessage(content=user_input)]},
+                {
+                    # Send the latest user message to the chatbot
+                    "messages": [
+                        HumanMessage(content=user_input)
+                    ]
+                },
+
+                # Use the current conversation thread
                 config=CONFIG,
-                stream_mode="messages",
-            ):
-                # Lazily create & update the SAME status container when any tool runs
-                if isinstance(message_chunk, ToolMessage):
-                    tool_name = getattr(message_chunk, "name", "tool")
-                    if status_holder["box"] is None:
-                        status_holder["box"] = st.status(
-                            f"🔧 Using `{tool_name}` …", expanded=True
-                        )
-                    else:
-                        status_holder["box"].update(
-                            label=f"🔧 Using `{tool_name}` …",
-                            state="running",
-                            expanded=True,
-                        )
 
-                # Stream ONLY assistant tokens
-                if isinstance(message_chunk, AIMessage):
-                    yield message_chunk.text
-
-        ai_message = st.write_stream(ai_only_stream())
-
-        # Finalize only if a tool was actually used
-        if status_holder["box"] is not None:
-            status_holder["box"].update(
-                label="✅ Tool finished", state="complete", expanded=False
+                # Stream individual message chunks
+                stream_mode="messages"
             )
+
+            # Display only AI messages
+            # This prevents tool and user messages from appearing
+            if isinstance(message_chunk, AIMessage)
+        )
 
 
     # Save the complete assistant response in Streamlit session state

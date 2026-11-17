@@ -1,4 +1,8 @@
-from agentic_chatbot_hitl_backend import (
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # make src/ importable
+
+from backend.agentic_chatbot_hitl_backend import (
     chatbot,
     get_all_threads,
     ingest_rag_document
