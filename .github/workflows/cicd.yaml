@@ -8,6 +8,8 @@ on:
       - "README.md"
       - "notebooks/**"
       - "diagrams/**"
+      - "examples/**"
+      - "tests/**"
   pull_request:
     branches:
       - main
@@ -15,10 +17,11 @@ on:
   # Allows you to run the workflow manually
   workflow_dispatch:
 
-# Prevent two deployments from running at the same time
+# Prevent two deployments from running at the same time.
+# PRs get their own group (per branch) so they never wait on, or cancel, a deployment.
 concurrency:
-  group: agentic-chatbot-production
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}', github.ref) || 'agentic-chatbot-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   AWS_REGION: ap-northeast-1          # change to your region
@@ -123,5 +126,19 @@ jobs:
               -v ~/app/data:/app/data \
               -v ~/app/faiss_db:/app/faiss_db \
               "$IMAGE"
+
+            # Health check: fail the deploy if Streamlit doesn't come up within ~60s
+            for i in $(seq 1 30); do
+              if curl -fs http://localhost/_stcore/health > /dev/null; then
+                echo "App is healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "App did not become healthy, container logs:"
+                docker logs --tail 50 "$CONTAINER_NAME"
+                exit 1
+              fi
+              sleep 2
+            done
 
             docker image prune -af
