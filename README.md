@@ -43,6 +43,8 @@ New to LangGraph? The `notebooks/` folder builds the same ideas step by step, an
 ├── diagrams/             # Excalidraw architecture diagrams
 ├── examples/             # Standalone CLI / non-streaming demos
 ├── tests/                # Streaming smoke test
+├── .github/workflows/
+│   └── cicd.yaml         # CI/CD: build → Docker Hub → deploy on EC2
 ├── Dockerfile
 └── pyproject.toml        # Dependencies (managed by uv)
 ```
@@ -57,7 +59,8 @@ New to LangGraph? The `notebooks/` folder builds the same ideas step by step, an
 - **Streamlit**: chat UI
 - **LangSmith** (optional): tracing
 - **uv**: dependency management
-- **Docker**: containerised deployment
+- **Docker** + **Docker Hub**: containerised deployment
+- **GitHub Actions** + **AWS EC2**: CI/CD pipeline with a self-hosted runner
 
 ## Getting Started
 
@@ -97,15 +100,79 @@ uv run streamlit run src/app.py
 
 To open the notebooks, run `uv run jupyter lab`.
 
-## Deployment (AWS)
+## CI/CD Deployment to AWS with GitHub Actions
 
-`.github/workflows/cicd.yaml` runs on every push to `main`:
+Every push to `main` runs `.github/workflows/cicd.yaml`, which:
 
-1. **CI**: install from `uv.lock`, lint with ruff, check that the graph builds
-2. **Build**: build the Docker image and push it to Amazon ECR
-3. **Deploy**: SSH into an EC2 instance, pull the new image and restart the container on port 80
+1. Builds a Docker image from the source code
+2. Pushes the image to Docker Hub
+3. On the EC2 instance (a self-hosted GitHub Actions runner), pulls the image from Docker Hub
+4. Runs the container on EC2, serving the app on port `8501`
 
-Pull requests run CI only. The workflow can also be started manually from the Actions tab.
+### 1. Log in to the AWS console
+
+### 2. Create an IAM user for deployment
+
+Attach this policy:
+
+- `AmazonEC2FullAccess`
+
+Then create an access key for the user (**Security credentials → Create access key**) and save the key ID and secret. They go into GitHub Secrets in step 6.
+
+### 3. Launch an EC2 instance (Ubuntu)
+
+In the instance's security group, add an inbound rule: **Custom TCP, port `8501`, source `0.0.0.0/0`**. This is the port Streamlit listens on.
+
+### 4. Install Docker on the EC2 instance
+
+Connect to the instance, then run:
+
+```bash
+# Optional
+sudo apt-get update -y
+sudo apt-get upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker ubuntu
+newgrp docker
+```
+
+### 5. Configure EC2 as a self-hosted runner
+
+On GitHub, go to **Settings → Actions → Runners → New self-hosted runner**, choose **Linux**, then run the commands it shows on the EC2 instance, one by one.
+
+> Tip: `./run.sh` stops when you close the SSH session. To keep the runner alive after you log out, install it as a service instead:
+> ```bash
+> sudo ./svc.sh install
+> sudo ./svc.sh start
+> ```
+
+### 6. Add secrets to GitHub Actions
+
+Go to **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+| Secret | Value |
+|---|---|
+| `REGISTRY` | `docker.io` |
+| `DOCKER_USERNAME` | Your Docker Hub username |
+| `DOCKER_PASSWORD` | A Docker Hub access token (**Account settings → Personal access tokens**, Read & Write) |
+| `IMAGE_NAME` | `agentic-chatbot` |
+| `AWS_ACCESS_KEY_ID` | Access key ID of the IAM user from step 2 |
+| `AWS_SECRET_ACCESS_KEY` | Secret access key of the IAM user from step 2 |
+| `AWS_REGION` | e.g. `us-east-1` |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `TAVILY_API_KEY` | Tavily API key |
+| `OPENWEATHER_API_KEY` | OpenWeather API key |
+| `GOOGLE_API_KEY` | Google Gemini API key |
+| `ALPHAVANTAGE_API_KEY` | Alpha Vantage API key |
+| `LANGSMITH_TRACING` | `true` |
+| `LANGSMITH_ENDPOINT` | `https://api.smith.langchain.com` |
+| `LANGSMITH_API_KEY` | LangSmith API key |
+| `LANGSMITH_PROJECT` | `agentic-chatbot-project` |
+
+Once the runner is online and the secrets are set, push to `main` (or run the workflow manually from the **Actions** tab), then open `http://<EC2-public-IP>:8501`.
 
 ## Notes
 
