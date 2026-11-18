@@ -1,9 +1,8 @@
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START
 from typing import TypedDict, Annotated
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
-from backend.config import ENV_PATH, CHAT_DB_PATH, FAISS_DB_PATH
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
 import sqlite3
@@ -16,10 +15,18 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.document_compressors import FlashrankRerank
 import os 
 from typing import Any
+from pathlib import Path
+from langgraph.types import interrupt
 
+
+# Paths: code lives in src/, data stays at the project root
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ENV_PATH = PROJECT_ROOT / ".env"
+CHAT_DB_PATH = PROJECT_ROOT / "data" / "chatbot.db"
+FAISS_DB_PATH = PROJECT_ROOT / "faiss_db"
+CHAT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 load_dotenv(ENV_PATH)
@@ -34,15 +41,6 @@ llm = ChatGoogleGenerativeAI(
 
 # Embeddings model
 embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
-
-
-# Two-stage retrieval: FAISS fetches RETRIEVE_K candidates, FlashRank keeps the best RERANK_TOP_N
-RETRIEVE_K = 20
-RERANK_TOP_N = 4
-
-# Reranker (runs locally; the model is downloaded once on first use)
-# ms-marco-MultiBERT-L-12 is multilingual, so Chinese queries work too
-reranker = FlashrankRerank(model="ms-marco-MultiBERT-L-12", top_n=RERANK_TOP_N)
 
 
 
@@ -67,7 +65,7 @@ def get_retriever():
     
     retriever = vector_store.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": RETRIEVE_K}
+        search_kwargs={"k": 4}
     )
 
     return retriever
@@ -89,8 +87,7 @@ def rag_tool(query: str) -> str:
         query: The question or search query used to retrieve PDF content.
     """
     retriever = get_retriever()
-    candidates = retriever.invoke(query)
-    documents = reranker.compress_documents(candidates, query)
+    documents = retriever.invoke(query)
 
     if not documents:
         return "No relevant information was found in the PDF."
@@ -100,13 +97,11 @@ def rag_tool(query: str) -> str:
     for index, document in enumerate(documents, start=1):
         source = document.metadata.get("source", "Unknown source")
         page = document.metadata.get("page", "Unknown page")
-        score = document.metadata.get("relevance_score")
 
         formatted_documents.append(
             f"Document {index}\n"
             f"Source: {source}\n"
             f"Page: {page}\n"
-            f"Relevance score: {score:.3f}\n"
             f"Content: {document.page_content}"
         )
 
@@ -161,6 +156,37 @@ def get_stock_price(symbol: str) -> dict:
     url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={api_key}"
     r = requests.get(url)
     return r.json()
+
+
+
+@tool
+def purchase_stock(symbol: str, quantity: int) -> dict:
+    """
+    Simulate purchasing a given quantity of a stock symbol.
+
+    HUMAN-IN-THE-LOOP:
+    Before confirming the purchase, this tool will interrupt
+    and wait for a human decision ("yes" / anything else).
+    """
+    # This pauses the graph and returns control to the caller
+    decision = interrupt(f"Approve buying {quantity} shares of {symbol}? (yes/no)")
+
+    if isinstance(decision, str) and decision.lower() == "yes":
+        return {
+            "status": "success",
+            "message": f"Purchase order placed for {quantity} shares of {symbol}.",
+            "symbol": symbol,
+            "quantity": quantity,
+        }
+    
+    else:
+        return {
+            "status": "cancelled",
+            "message": f"Purchase of {quantity} shares of {symbol} was declined by human.",
+            "symbol": symbol,
+            "quantity": quantity,
+        }
+
 
 
 
@@ -287,7 +313,7 @@ def get_current_weather(location: str) -> str:
 
 
 # Make tool list
-tools = [search_tool,calculator, get_stock_price,get_current_weather, rag_tool]
+tools = [search_tool,calculator, get_stock_price,get_current_weather, rag_tool, purchase_stock]
 
 # Make the LLM tool-aware
 llm_with_tools = llm.bind_tools(tools)
@@ -318,6 +344,7 @@ def chat_node(state: ChatState):
             "- Use `calculator` for mathematical calculations. Do not calculate complex "
             "expressions manually when the calculator is available.\n"
             "- Use `get_stock_price` when the user asks for the current price of a stock.\n"
+            "- Use `purchase_stock` when the user wants to purchase a stock.\n"
             "- Use `get_current_weather` when the user asks about current weather for a location.\n\n"
 
             "Answer general questions directly when no tool is required. "
@@ -335,6 +362,7 @@ def chat_node(state: ChatState):
     response = llm_with_tools.invoke(messages)
 
     return {"messages": [response]}
+
 
 
 
@@ -372,3 +400,5 @@ def get_all_threads():
         all_threads.add(ckpt.config['configurable']['thread_id'])
 
     return list(all_threads)
+
+
