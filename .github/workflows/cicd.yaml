@@ -51,9 +51,12 @@ jobs:
           uv run python -c "import sys; sys.path.insert(0, 'src'); import backend; print(list(backend.chatbot.get_graph().nodes))"
 
   # ---------- Build the Docker image and push it to Amazon ECR ----------
+  # Skipped until AWS is set up: add the repo variable DEPLOY_ENABLED=true
+  # (Settings → Secrets and variables → Actions → Variables) to turn deploys on.
+  # deploy depends on this job, so it is skipped too.
   build-and-push:
     needs: ci
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
