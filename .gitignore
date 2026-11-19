@@ -17,7 +17,6 @@ __pycache__/
 
 # Local runtime data
 chatbot.db*
-notebooks/faiss_index/
 faiss_db/
 
 # Editors / OS

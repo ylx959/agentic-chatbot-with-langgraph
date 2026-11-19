@@ -1,6 +1,10 @@
 # Agentic Chatbot using LangGraph
 
-An agentic chatbot built with [LangGraph](https://github.com/langchain-ai/langgraph) and [Streamlit](https://streamlit.io/). It can search the web, do math, check stock prices and the weather, and answer questions about a PDF you upload. Before it makes a (mock) stock purchase, it stops and asks you to approve.
+An **agentic AI chatbot** built with **Python, LangGraph, LangChain, Google Gemini, Streamlit, FAISS and SQLite**.
+
+It can search the web, do math, check stock prices and the weather, and answer questions about a PDF you upload. Before it makes a (mock) stock purchase, it stops and asks you to approve.
+
+---
 
 ## Highlights
 
@@ -10,44 +14,9 @@ An agentic chatbot built with [LangGraph](https://github.com/langchain-ai/langgr
 - **RAG over your PDF**: upload a PDF, which is chunked, embedded and stored in FAISS, then ask questions about it
 - **Human-in-the-loop**: `purchase_stock` pauses the graph with `interrupt()` and resumes with your approve/reject decision
 - **Streaming replies** with live tool-call status
+- **Docker-ready**, with CI/CD to AWS EC2 through GitHub Actions
 
-## How it works
-
-```
-START ──► chat_node ──(tool call?)──► tools ──┐
-              ▲            │                  │
-              │            └──(no)──► END     │
-              └───────────────────────────────┘
-```
-
-`chat_node` calls Gemini with all tools bound. When the model asks for a tool, `tools_condition` routes to the `ToolNode`, and the result goes back to the model. The loop ends when the model answers without calling a tool. A `SqliteSaver` checkpointer stores each thread's state, which lets the human-in-the-loop interrupt pause and resume.
-
-## Learn with the notebooks
-
-New to LangGraph? The `notebooks/` folder builds the same ideas step by step, and you can follow along before reading `src/`:
-
-1. `Chatbot_workflow.ipynb`: a basic chat graph
-2. `tools_demo.ipynb`: tool calling
-3. `rag_demo.ipynb`: the RAG pipeline
-4. `HITL_demo.ipynb`: human-in-the-loop with `interrupt()`
-
-`diagrams/` has Excalidraw sketches of the architecture.
-
-## Project Structure
-
-```
-├── src/
-│   ├── app.py            # Streamlit UI
-│   └── backend.py        # LangGraph graph, tools, RAG, SQLite checkpointer
-├── notebooks/            # Step-by-step learning notebooks
-├── diagrams/             # Excalidraw architecture diagrams
-├── examples/             # Standalone CLI / non-streaming demos
-├── tests/                # Streaming smoke test
-├── .github/workflows/
-│   └── cicd.yaml         # CI/CD: build → Docker Hub → deploy on EC2
-├── Dockerfile
-└── pyproject.toml        # Dependencies (managed by uv)
-```
+---
 
 ## Built With
 
@@ -62,120 +31,379 @@ New to LangGraph? The `notebooks/` folder builds the same ideas step by step, an
 - **Docker** + **Docker Hub**: containerised deployment
 - **GitHub Actions** + **AWS EC2**: CI/CD pipeline with a self-hosted runner
 
+---
+
+## How It Works
+
+```
+START ──► chat_node ──(tool call?)──► tools ──┐
+              ▲            │                  │
+              │            └──(no)──► END     │
+              └───────────────────────────────┘
+```
+
+`chat_node` calls Gemini with all tools bound. When the model asks for a tool, `tools_condition` routes to the `ToolNode`, and the result goes back to the model. The loop ends when the model answers without calling a tool. A `SqliteSaver` checkpointer stores each thread's state, which lets the human-in-the-loop interrupt pause and resume.
+
+---
+
+## Prerequisites
+
+Make sure you have the following:
+
+- Python 3.11+ (uv can install it for you)
+- [uv](https://docs.astral.sh/uv/)
+- Git
+- Google API key (Gemini)
+- Tavily API key (web search)
+- OpenWeather API key (weather)
+- Alpha Vantage API key (stock prices)
+
+Optional, for deployment:
+
+- Docker
+- Docker Hub account
+- AWS account
+- EC2 instance
+- GitHub Actions self-hosted runner
+
+---
+
 ## Getting Started
 
-### 1. Configure API keys
-
-Create a `.env` file in the project root:
-
-```env
-GOOGLE_API_KEY=...          # required: Gemini chat model and embeddings
-TAVILY_API_KEY=...          # web search tool
-OPENWEATHER_API_KEY=...     # weather tool
-ALPHAVANTAGE_API_KEY=...    # stock price tool
-
-# Optional: LangSmith tracing
-LANGSMITH_TRACING=false
-LANGSMITH_API_KEY=...
-LANGSMITH_PROJECT=agentic-chatbot-project
-```
-
-### 2a. Run with Docker
+### 1. Clone the repository
 
 ```bash
-docker build -t agentic-chatbot .
-docker run --rm -p 8501:8501 --env-file .env agentic-chatbot
+git clone https://github.com/ylx959/agentic-chatbot-with-langgraph.git
 ```
 
-Open http://localhost:8501. To keep chat history and the PDF index after the container stops, add `-v "$PWD/data:/app/data" -v "$PWD/faiss_db:/app/faiss_db"`.
+### 2. Navigate to the project directory
 
-### 2b. Run locally
+```bash
+cd agentic-chatbot-with-langgraph
+```
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+### 3. Install dependencies
+
+uv creates the virtual environment and installs the locked dependencies in one step:
 
 ```bash
 uv sync
+```
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the project root directory.
+
+```env
+GOOGLE_API_KEY=your_google_api_key
+TAVILY_API_KEY=your_tavily_api_key
+OPENWEATHER_API_KEY=your_openweather_api_key
+ALPHAVANTAGE_API_KEY=your_alphavantage_api_key
+
+LANGSMITH_TRACING=false
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=agentic-chatbot-project
+```
+
+If you do not want to use LangSmith tracing, keep:
+
+```env
+LANGSMITH_TRACING=false
+```
+
+---
+
+## Run Locally
+
+Start the Streamlit app:
+
+```bash
 uv run streamlit run src/app.py
 ```
 
-To open the notebooks, run `uv run jupyter lab`.
+The app will be available at:
 
-## CI/CD Deployment to AWS with GitHub Actions
+```text
+http://localhost:8501
+```
 
-Every push to `main` runs `.github/workflows/cicd.yaml`, which:
+---
 
-1. Builds a Docker image from the source code
-2. Pushes the image to Docker Hub
-3. On the EC2 instance (a self-hosted GitHub Actions runner), pulls the image from Docker Hub
-4. Runs the container on EC2, serving the app on port `8501`
+## Project Structure
 
-### 1. Log in to the AWS console
+```text
+agentic-chatbot-with-langgraph/
+│
+├── src/
+│   ├── app.py              # Streamlit UI: chat, threads, PDF upload, HITL approval
+│   └── backend.py          # LangGraph graph, tools, RAG, SQLite checkpointer
+│
+├── examples/               # Standalone CLI / non-streaming demos
+├── tests/                  # Streaming smoke test
+│
+├── .github/workflows/
+│   └── cicd.yaml           # CI/CD: build → Docker Hub → deploy on EC2
+├── Dockerfile              # Docker image configuration
+├── .dockerignore           # Docker ignore rules
+├── pyproject.toml          # Dependencies (managed by uv)
+├── uv.lock                 # Locked dependency versions
+│
+├── data/                   # SQLite database (created at runtime)
+└── faiss_db/               # FAISS vector index (created at runtime)
+```
 
-### 2. Create an IAM user for deployment
+---
 
-Attach this policy:
+## Docker Deployment
 
-- `AmazonEC2FullAccess`
-
-Then create an access key for the user (**Security credentials → Create access key**) and save the key ID and secret. They go into GitHub Secrets in step 6.
-
-### 3. Launch an EC2 instance (Ubuntu)
-
-In the instance's security group, add an inbound rule: **Custom TCP, port `8501`, source `0.0.0.0/0`**. This is the port Streamlit listens on.
-
-### 4. Install Docker on the EC2 instance
-
-Connect to the instance, then run:
+### 1. Build the Docker image
 
 ```bash
-# Optional
+docker build -t agentic-chatbot .
+```
+
+### 2. Run the Docker container
+
+```bash
+docker run -d \
+  --name agentic-chatbot \
+  --restart always \
+  -p 8501:8501 \
+  --env-file .env \
+  -v "$PWD/data:/app/data" \
+  -v "$PWD/faiss_db:/app/faiss_db" \
+  agentic-chatbot
+```
+
+The two `-v` volumes keep chat history and the PDF index after the container stops.
+
+The app will be available at:
+
+```text
+http://localhost:8501
+```
+
+---
+
+## AWS CI/CD Deployment with GitHub Actions
+
+This project can be deployed to AWS using:
+
+- GitHub Actions
+- Docker Hub
+- Amazon EC2
+- Docker
+- GitHub self-hosted runner
+
+---
+
+### 1. Create an IAM User
+
+Log in to the AWS console, create an IAM user for deployment and attach the following policy:
+
+```text
+AmazonEC2FullAccess
+```
+
+Then create an access key for the user (**Security credentials → Create access key**) and save the key ID and secret for GitHub Secrets.
+
+---
+
+### 2. Create an EC2 Instance
+
+Create an Ubuntu EC2 instance.
+
+Recommended inbound security group rule:
+
+```text
+Type: Custom TCP
+Port: 8501
+Source: 0.0.0.0/0
+```
+
+---
+
+### 3. Install Docker on EC2
+
+Connect to your EC2 instance and run:
+
+```bash
 sudo apt-get update -y
 sudo apt-get upgrade -y
+```
 
-# Install Docker
+Install Docker:
+
+```bash
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
+```
+
+Add the Ubuntu user to the Docker group:
+
+```bash
 sudo usermod -aG docker ubuntu
 newgrp docker
 ```
 
-### 5. Configure EC2 as a self-hosted runner
+Check Docker:
 
-On GitHub, go to **Settings → Actions → Runners → New self-hosted runner**, choose **Linux**, then run the commands it shows on the EC2 instance, one by one.
+```bash
+docker --version
+```
 
-> Tip: `./run.sh` stops when you close the SSH session. To keep the runner alive after you log out, install it as a service instead:
-> ```bash
-> sudo ./svc.sh install
-> sudo ./svc.sh start
-> ```
+---
 
-### 6. Add secrets to GitHub Actions
+### 4. Configure EC2 as a GitHub Self-Hosted Runner
 
-Go to **Settings → Secrets and variables → Actions → New repository secret** and add:
+Go to your GitHub repository:
 
-| Secret | Value |
-|---|---|
-| `REGISTRY` | `docker.io` |
-| `DOCKER_USERNAME` | Your Docker Hub username |
-| `DOCKER_PASSWORD` | A Docker Hub access token (**Account settings → Personal access tokens**, Read & Write) |
-| `IMAGE_NAME` | `agentic-chatbot` |
-| `AWS_ACCESS_KEY_ID` | Access key ID of the IAM user from step 2 |
-| `AWS_SECRET_ACCESS_KEY` | Secret access key of the IAM user from step 2 |
-| `AWS_REGION` | e.g. `us-east-1` |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `TAVILY_API_KEY` | Tavily API key |
-| `OPENWEATHER_API_KEY` | OpenWeather API key |
-| `GOOGLE_API_KEY` | Google Gemini API key |
-| `ALPHAVANTAGE_API_KEY` | Alpha Vantage API key |
-| `LANGSMITH_TRACING` | `true` |
-| `LANGSMITH_ENDPOINT` | `https://api.smith.langchain.com` |
-| `LANGSMITH_API_KEY` | LangSmith API key |
-| `LANGSMITH_PROJECT` | `agentic-chatbot-project` |
+```text
+Settings → Actions → Runners → New self-hosted runner
+```
 
-Once the runner is online and the secrets are set, push to `main` (or run the workflow manually from the **Actions** tab), then open `http://<EC2-public-IP>:8501`.
+Select Linux and follow the commands shown by GitHub.
+
+After setup, start the runner:
+
+```bash
+./run.sh
+```
+
+`./run.sh` stops when you close the SSH session. To keep the runner alive, configure it as a service:
+
+```bash
+sudo ./svc.sh install
+sudo ./svc.sh start
+```
+
+---
+
+## GitHub Secrets
+
+Add the following secrets in your GitHub repository:
+
+```text
+REGISTRY
+DOCKER_USERNAME
+DOCKER_PASSWORD
+IMAGE_NAME
+
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_REGION
+
+GOOGLE_API_KEY
+TAVILY_API_KEY
+OPENWEATHER_API_KEY
+ALPHAVANTAGE_API_KEY
+OPENAI_API_KEY
+LANGSMITH_TRACING
+LANGSMITH_ENDPOINT
+LANGSMITH_API_KEY
+LANGSMITH_PROJECT
+```
+
+Path:
+
+```text
+GitHub Repository → Settings → Secrets and variables → Actions → New repository secret
+```
+
+Example:
+
+```text
+REGISTRY=docker.io
+IMAGE_NAME=agentic-chatbot
+AWS_REGION=us-east-1
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_PROJECT=agentic-chatbot-project
+```
+
+`DOCKER_USERNAME` is your Docker Hub username. `DOCKER_PASSWORD` is a Docker Hub access token, not your password (**Account settings → Personal access tokens**, Read & Write).
+
+---
+
+## GitHub Actions Workflow
+
+The workflow lives in:
+
+```text
+.github/workflows/cicd.yaml
+```
+
+On every push to `main`, it will:
+
+1. Build the Docker image
+2. Push the image to Docker Hub
+3. Pull the latest image on EC2 (self-hosted runner)
+4. Stop the old container
+5. Run the new container on port `8501`
+
+Once it finishes, open `http://<EC2-public-IP>:8501`.
+
+---
+
+## Usage
+
+After running locally or deploying to AWS:
+
+1. Open the app in your browser.
+2. Start chatting with the AI assistant.
+3. Attach a PDF in the chat input box to use it as context.
+4. Ask questions about the uploaded PDF.
+5. Ask about current events, weather or stock prices to trigger the tools.
+6. Ask it to buy a stock and approve or reject the purchase.
+7. Switch between conversations in the sidebar. History is saved.
+
+---
+
+## Example Questions
+
+```text
+Summarize the uploaded PDF.
+```
+
+```text
+What's the weather in Taipei right now?
+```
+
+```text
+What is the current price of AAPL?
+```
+
+```text
+Buy 10 shares of TSLA.
+```
+
+```text
+Calculate 125 * 48 / 6.
+```
+
+---
 
 ## Notes
 
+- Do not commit your `.env` file to GitHub.
+- Keep API keys inside GitHub Secrets for deployment.
+- Make sure port `8501` is open in your EC2 security group.
 - Chat history lives in `data/chatbot.db`. Delete it to start fresh; it's recreated automatically.
 - Uploading a PDF replaces the single shared index in `faiss_db/`.
 - `purchase_stock` is a mock tool. No real trade is ever placed.
+
+---
+
+## Contributing
+
+Contributions are welcome.
+
+To contribute:
+
+1. Fork the repository.
+2. Create a new branch.
+3. Make your changes.
+4. Submit a pull request.

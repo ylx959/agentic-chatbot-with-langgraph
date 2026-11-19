@@ -7,7 +7,5 @@ __pycache__/
 .ipynb_checkpoints/
 data/
 faiss_db/
-notebooks/
-diagrams/
 examples/
 tests/

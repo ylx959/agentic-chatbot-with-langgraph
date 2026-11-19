@@ -6,8 +6,6 @@ on:
       - main
     paths-ignore:
       - "README.md"
-      - "notebooks/**"
-      - "diagrams/**"
       - "examples/**"
       - "tests/**"
   pull_request:
